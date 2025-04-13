@@ -28,13 +28,13 @@ function App() {
   };
 
   // Используем продакшен URL (например, https://my-app.example.com/proxy-payzaty)
-  const openPayzaty = () => {
-    window.open(
-      'https://my-app.example.com/proxy-payzaty',
-      '_blank',
-      'noopener,noreferrer'
-    );
-  };
+const openPayzaty = () => {
+  window.open(
+    'https://my-backend.onrender.com/proxy-payzaty', 
+    '_blank', 
+    'noopener,noreferrer'
+  );
+};
 
   return (
     <div className="min-h-screen bg-[#202124] text-gray-200" onClick={handlePageClick}>
