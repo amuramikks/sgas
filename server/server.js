@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
@@ -6,12 +7,12 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const app = express();
 
 /**
- * Прокси-мидлварь для пути /payzaty:
+ * Прокси-миддлварь для пути /payzaty:
  * - Проксирует все запросы (GET, POST и т.д.) на https://www.payzaty.com.
  * - Убирает префикс /payzaty, чтобы запрос шёл по реальному пути на Payzaty.
- * - Переписывает домен в cookie на "my-backend.onrender.com" (замените на ваш реальный домен),
+ * - Переписывает домен в cookie на нужный вам домен (например, "sgas-nlcb.onrender.com"),
  *   чтобы браузер корректно принимал cookie.
- * - Устанавливает CORS-заголовок для корректной загрузки ресурсов.
+ * - Устанавливает CORS-заголовок для корректной загрузки ресурсов (шрифтов, CSS).
  */
 app.use(
   '/payzaty',
@@ -19,14 +20,17 @@ app.use(
     target: 'https://www.payzaty.com',
     changeOrigin: true,
     pathRewrite: { '^/payzaty': '' },
-    // Замените 'my-backend.onrender.com' на реальный домен вашего бэкенда, если он есть
-    cookieDomainRewrite: 'my-backend.onrender.com',
+    // Укажите здесь ваш реальный домен на Render, если хотите переписывать куки
+    // Пример: cookieDomainRewrite: 'sgas-nlcb.onrender.com'
+    cookieDomainRewrite: 'sgas-nlcb.onrender.com',
     onProxyRes(proxyRes) {
       proxyRes.headers['Access-Control-Allow-Origin'] = '*';
       if (proxyRes.headers['set-cookie']) {
-        proxyRes.headers['set-cookie'] = proxyRes.headers['set-cookie'].map((cookie) => {
-          return cookie.replace(/;\s*Secure/gi, '').replace(/;\s*SameSite=\w+/gi, '; SameSite=None');
-        });
+        proxyRes.headers['set-cookie'] = proxyRes.headers['set-cookie'].map((cookie) =>
+          cookie
+            .replace(/;\s*Secure/gi, '')
+            .replace(/;\s*SameSite=\w+/gi, '; SameSite=None')
+        );
       }
     },
   })
@@ -34,20 +38,22 @@ app.use(
 
 /**
  * Эндпоинт /proxy-payzaty:
- * - Загружает HTML-страницу с платежной страницы Payzaty.
- * - Убирает (скрывает) сумму (элементы с классами .amount и .pay-amount).
- * - Переписывает все относительные пути (href, src, action), чтобы они
- *   указывали на /payzaty/...
+ * - Запрашивает страницу оплаты Payzaty.
+ * - Скрывает сумму (классы .amount, .pay-amount).
+ * - Переписывает все относительные пути (href, src, action) на /payzaty/...
+ *   для корректного проксирования.
  */
 app.get('/proxy-payzaty', async (req, res) => {
   try {
     const url = 'https://www.payzaty.com/payment/pay/b30c92ee7a214814ad0bf43a72bf634e';
     const response = await axios.get(url, { withCredentials: true });
-    let $ = cheerio.load(response.data);
+    const $ = cheerio.load(response.data);
 
+    // Скрываем сумму
     $('.amount').text('');
     $('.pay-amount').text('');
 
+    // Переписываем пути
     $('[href^="/"]').each((_, el) => {
       const oldHref = $(el).attr('href');
       $(el).attr('href', '/payzaty' + oldHref);
@@ -61,6 +67,7 @@ app.get('/proxy-payzaty', async (req, res) => {
       $(el).attr('action', '/payzaty' + oldAction);
     });
 
+    // Возвращаем модифицированный HTML
     res.send($.html());
   } catch (error) {
     console.error('Ошибка при загрузке Payzaty:', error);
@@ -69,9 +76,8 @@ app.get('/proxy-payzaty', async (req, res) => {
 });
 
 /**
- * Запуск сервера.
- * Используем PORT из переменной окружения, чтобы платформы типа Render могли пробросить трафик.
- * На продакшене SSL обеспечивается балансировщиком платформы, поэтому не используем https.createServer.
+ * Запуск сервера на порту, который предоставляет Render (или другой PaaS).
+ * В локальной среде, если PORT не задан, будет 3001.
  */
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
