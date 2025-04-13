@@ -11,19 +11,19 @@ const app = express();
 /**
  * 1) Прокси-мидлварь на /payzaty:
  *    - Проксирует запросы (GET, POST и т.д.) на https://www.payzaty.com
- *    - Переписывает домен в cookie (чтобы куки стали для "localhost"), 
- *      удаляет Secure и задаёт SameSite=None для локальной разработки.
- *    - Устанавливает CORS-заголовок, чтобы шрифты и картинки не блокировались.
+ *    - Переписывает домен в cookie на "my-app.example.com", чтобы браузер мог их принять
+ *      (если ваш продакшен домен — my-app.example.com).
+ *    - Устанавливает CORS-заголовок для загрузки ресурсов.
  */
 app.use(
   '/payzaty',
   createProxyMiddleware({
     target: 'https://www.payzaty.com',
     changeOrigin: true,
-    // Убираем префикс /payzaty, чтобы запросы шли на реальный путь на Payzaty.
+    // Убираем префикс /payzaty, чтобы запросы шли по реальному пути на Payzaty.
     pathRewrite: { '^/payzaty': '' },
-    // Переписываем домен cookie на "localhost"
-    cookieDomainRewrite: 'localhost',
+    // Переписываем домен куки на продакшен домен
+    cookieDomainRewrite: 'my-app.example.com',
     onProxyRes(proxyRes) {
       // Разрешаем кросс-доступ через CORS
       proxyRes.headers['Access-Control-Allow-Origin'] = '*';
@@ -42,23 +42,23 @@ app.use(
 
 /**
  * 2) Эндпоинт /proxy-payzaty:
- *    - Загружает реальный HTML-ответ с платежной страницы Payzaty.
- *    - Убирает видимую сумму (элементы с классами .amount и .pay-amount).
+ *    - Загружает HTML-ответ с платежной страницы Payzaty.
+ *    - Удаляет/скрывает сумму (элементы с классами .amount и .pay-amount).
  *    - Переписывает все относительные пути (href, src, action) так, чтобы они 
- *      указывали на /payzaty/..., что позволяет запросам (GET, POST) идти через наш proxy.
+ *      указывали на /payzaty/... (то есть, чтобы запросы шли через наш прокси).
  */
 app.get('/proxy-payzaty', async (req, res) => {
   try {
     const url = 'https://www.payzaty.com/payment/pay/b30c92ee7a214814ad0bf43a72bf634e';
-    // При необходимости с передачей cookie
+    // Запрашиваем страницу с передачей cookie, если требуется
     const response = await axios.get(url, { withCredentials: true });
     let $ = cheerio.load(response.data);
 
-    // Удаляем/прячем сумму.
+    // Удаляем/прячем сумму
     $('.amount').text('');
     $('.pay-amount').text('');
 
-    // Переписываем атрибуты href, src и action для всех элементов, начинающихся с "/".
+    // Переписываем атрибуты href, src и action для всех элементов, начинающихся с "/"
     $('[href^="/"]').each((_, el) => {
       const oldHref = $(el).attr('href');
       $(el).attr('href', '/payzaty' + oldHref);
