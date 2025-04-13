@@ -27,10 +27,10 @@ function App() {
     }
   };
 
-  // Используем HTTPS-ссылку, так как сервер работает через HTTPS.
+  // Используем продакшен URL (например, https://my-app.example.com/proxy-payzaty)
   const openPayzaty = () => {
     window.open(
-      'https://localhost:3001/proxy-payzaty',
+      'https://my-app.example.com/proxy-payzaty',
       '_blank',
       'noopener,noreferrer'
     );
@@ -51,12 +51,16 @@ function App() {
             <div className="space-y-4">
               <p className="text-gray-300 mb-6">Are you 18 years or older?</p>
               <div className="flex space-x-4">
-                <button onClick={() => handleAgeVerification(true)}
-                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg transition-colors">
+                <button
+                  onClick={() => handleAgeVerification(true)}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg transition-colors"
+                >
                   Yes
                 </button>
-                <button onClick={() => handleAgeVerification(false)}
-                        className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-3 rounded-lg transition-colors">
+                <button
+                  onClick={() => handleAgeVerification(false)}
+                  className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-3 rounded-lg transition-colors"
+                >
                   No
                 </button>
               </div>
@@ -84,8 +88,10 @@ function App() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span>Amount:</span>
-                  <div className={`font-bold ${priceHidden ? 'text-transparent bg-gray-600 rounded px-2' : ''}`}
-                       onClick={() => setPriceHidden(!priceHidden)}>
+                  <div
+                    className={`font-bold ${priceHidden ? 'text-transparent bg-gray-600 rounded px-2' : ''}`}
+                    onClick={() => setPriceHidden(!priceHidden)}
+                  >
                     {priceHidden ? 'XXXX' : '$49.99'}
                   </div>
                 </div>
