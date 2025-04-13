@@ -7,7 +7,7 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const app = express();
 
 /**
- * Прокси-миддлварь для пути /payzaty:
+ * Прокси-мидлварь для пути /payzaty:
  * - Проксирует все запросы (GET, POST и т.д.) на https://www.payzaty.com.
  * - Убирает префикс /payzaty, чтобы запрос шёл по реальному пути на Payzaty.
  * - Переписывает домен в cookie на нужный вам домен (например, "sgas-nlcb.onrender.com"),
@@ -20,11 +20,13 @@ app.use(
     target: 'https://www.payzaty.com',
     changeOrigin: true,
     pathRewrite: { '^/payzaty': '' },
-    // Укажите здесь ваш реальный домен на Render, если хотите переписывать куки
-    // Пример: cookieDomainRewrite: 'sgas-nlcb.onrender.com'
+    // Если у вас есть собственный домен для бэкенда (например, когда вы настроили Custom Domain в Render),
+    // замените 'sgas-nlcb.onrender.com' на него.
     cookieDomainRewrite: 'sgas-nlcb.onrender.com',
     onProxyRes(proxyRes) {
+      // Устанавливаем заголовок для разрешения кросс-доступа
       proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+      // Обработка Set-Cookie: убираем флаг Secure и устанавливаем SameSite=None
       if (proxyRes.headers['set-cookie']) {
         proxyRes.headers['set-cookie'] = proxyRes.headers['set-cookie'].map((cookie) =>
           cookie
@@ -38,10 +40,10 @@ app.use(
 
 /**
  * Эндпоинт /proxy-payzaty:
- * - Запрашивает страницу оплаты Payzaty.
- * - Скрывает сумму (классы .amount, .pay-amount).
- * - Переписывает все относительные пути (href, src, action) на /payzaty/...
- *   для корректного проксирования.
+ * - Запрашивает HTML-страницу с платежной страницы Payzaty.
+ * - Скрывает сумму (элементы с классами .amount и .pay-amount).
+ * - Переписывает все относительные пути (href, src, action), чтобы они
+ *   указывали на /payzaty/... (это нужно для корректного проксирования ресурсов).
  */
 app.get('/proxy-payzaty', async (req, res) => {
   try {
@@ -53,7 +55,7 @@ app.get('/proxy-payzaty', async (req, res) => {
     $('.amount').text('');
     $('.pay-amount').text('');
 
-    // Переписываем пути
+    // Переписываем все относительные пути, чтобы они начинались с /payzaty
     $('[href^="/"]').each((_, el) => {
       const oldHref = $(el).attr('href');
       $(el).attr('href', '/payzaty' + oldHref);
@@ -67,7 +69,6 @@ app.get('/proxy-payzaty', async (req, res) => {
       $(el).attr('action', '/payzaty' + oldAction);
     });
 
-    // Возвращаем модифицированный HTML
     res.send($.html());
   } catch (error) {
     console.error('Ошибка при загрузке Payzaty:', error);
@@ -76,8 +77,10 @@ app.get('/proxy-payzaty', async (req, res) => {
 });
 
 /**
- * Запуск сервера на порту, который предоставляет Render (или другой PaaS).
- * В локальной среде, если PORT не задан, будет 3001.
+ * Запуск сервера.
+ * Используем переменную окружения PORT, которую предоставляет Render (или другая платформа).
+ * Если PORT не задан (например, в локальной среде), будем слушать на 3001.
+ * На продакшене SSL обеспечивается балансировщиком, поэтому достаточно обычного app.listen.
  */
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
