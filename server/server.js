@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
@@ -11,9 +10,9 @@ const app = express();
 /**
  * 1) Прокси-мидлварь на /payzaty:
  *    - Проксирует запросы (GET, POST и т.д.) на https://www.payzaty.com
- *    - Переписывает домен в cookie на "my-app.example.com", чтобы браузер мог их принять
- *      (если ваш продакшен домен — my-app.example.com).
- *    - Устанавливает CORS-заголовок для загрузки ресурсов.
+ *    - Переписывает домен в cookie на "my-backend.onrender.com" (ваш реальный домен), 
+ *      чтобы браузер их принял.
+ *    - Устанавливает CORS-заголовок для корректной загрузки ресурсов.
  */
 app.use(
   '/payzaty',
@@ -22,12 +21,12 @@ app.use(
     changeOrigin: true,
     // Убираем префикс /payzaty, чтобы запросы шли по реальному пути на Payzaty.
     pathRewrite: { '^/payzaty': '' },
-    // Переписываем домен куки на продакшен домен
-    cookieDomainRewrite: 'my-app.example.com',
+    // Заменяем домен в cookie на ваш реальный домен бэкенда:
+    cookieDomainRewrite: 'my-backend.onrender.com',
     onProxyRes(proxyRes) {
-      // Разрешаем кросс-доступ через CORS
+      // Устанавливаем CORS-заголовок для разрешения кросс-доступа
       proxyRes.headers['Access-Control-Allow-Origin'] = '*';
-      // Если сервер отдаёт Set-Cookie, удаляем Secure и задаём SameSite=None
+      // Если сервер отдаёт Set-Cookie, обрабатываем их, убирая Secure и устанавливая SameSite=None.
       if (proxyRes.headers['set-cookie']) {
         let newCookies = proxyRes.headers['set-cookie'].map((cookie) => {
           cookie = cookie.replace(/;\s*Secure/gi, '');
@@ -42,23 +41,23 @@ app.use(
 
 /**
  * 2) Эндпоинт /proxy-payzaty:
- *    - Загружает HTML-ответ с платежной страницы Payzaty.
- *    - Удаляет/скрывает сумму (элементы с классами .amount и .pay-amount).
- *    - Переписывает все относительные пути (href, src, action) так, чтобы они 
- *      указывали на /payzaty/... (то есть, чтобы запросы шли через наш прокси).
+ *    - Загружает HTML-страницу с платежной страницы Payzaty.
+ *    - Убирает/скрывает сумму (элементы с классами .amount и .pay-amount).
+ *    - Переписывает все относительные пути (href, src, action), чтобы они
+ *      указывали на /payzaty/... (чтобы запросы шли через наш прокси).
  */
 app.get('/proxy-payzaty', async (req, res) => {
   try {
     const url = 'https://www.payzaty.com/payment/pay/b30c92ee7a214814ad0bf43a72bf634e';
-    // Запрашиваем страницу с передачей cookie, если требуется
+    // Запрос со включённой опцией передачи cookie, если это требуется
     const response = await axios.get(url, { withCredentials: true });
     let $ = cheerio.load(response.data);
 
-    // Удаляем/прячем сумму
+    // Скрываем сумму
     $('.amount').text('');
     $('.pay-amount').text('');
 
-    // Переписываем атрибуты href, src и action для всех элементов, начинающихся с "/"
+    // Переписываем все пути (href, src, action) так, чтобы они начинались с /payzaty.
     $('[href^="/"]').each((_, el) => {
       const oldHref = $(el).attr('href');
       $(el).attr('href', '/payzaty' + oldHref);
